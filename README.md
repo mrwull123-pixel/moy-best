@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<!-- saved from url=(0046)file:///C:/Users/MrWull/Downloads/index_7.html -->
+<html lang="ru"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Отзывы</title>
+<script src="./Отзывы_files/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: #F4F6F5; margin: 0; padding: 24px 16px; color: #1B2430; }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid #E1E5E3; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: #6B7573; font-size: 14px; margin: 0 0 16px; }
+  input, textarea, select { width: 100%; padding: 10px; border: 1px solid #D5DAD8; border-radius: 8px; font-size: 14px; margin-bottom: 10px; font-family: inherit; }
+  textarea { min-height: 80px; resize: vertical; }
+  button { width: 100%; padding: 11px; border-radius: 8px; border: none; background: #0F4C4C; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button.secondary { background: #fff; color: #0F4C4C; border: 1px solid #0F4C4C; }
+  button.small { width: auto; padding: 4px 10px; font-size: 12px; }
+  .stars { display: flex; gap: 6px; font-size: 26px; margin-bottom: 12px; cursor: pointer; }
+  .star { color: #D5DAD8; }
+  .star.on { color: #E0A315; }
+  .msg { font-size: 13px; color: #0F4C4C; margin-top: 8px; }
+  .wall-item { border: 1px solid #E1E5E3; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .wall-item .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .rating { color: #E0A315; font-size: 14px; }
+  .wall-item p { font-size: 14px; margin: 0 0 6px; }
+  .wall-item .author { font-size: 12px; color: #6B7573; }
+  .hidden-item { opacity: 0.4; }
+  a { color: #0F4C4C; }
+  .code-box { background: #F0F2F1; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 12px; word-break: break-all; margin-bottom: 10px; }
+  .row { display: flex; gap: 8px; }
+  .top-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .top-tabs button { width: auto; padding: 8px 14px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+    <div class="card">
+      <h1>Кабинет бизнеса</h1>
+      <p class="sub">Войдите или зарегистрируйтесь, чтобы собирать отзывы</p>
+      <input id="email" type="email" placeholder="Email">
+      <input id="password" type="password" placeholder="Пароль">
+      <div class="row">
+        <button onclick="login()">Войти</button>
+        <button class="secondary" onclick="signup()">Регистрация</button>
+      </div>
+      <p class="msg" id="auth-msg"></p>
+    </div>
+  </div>
+
+<script>
+// ЗАПОЛНИ ЭТИ ДВЕ СТРОКИ СВОИМИ ДАННЫМИ ИЗ SUPABASE (Settings -> API)
+const SUPABASE_URL = "https://odryexdrpovtmstdoitq.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_3ELQwJpeHSMMC6wpsnUBYw_xZCgw8YV";
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const app = document.getElementById('app');
+const params = new URLSearchParams(window.location.search);
+const reviewSlug = params.get('r');
+
+let currentRating = 5;
+
+async function init(){
+  if (reviewSlug) {
+    renderReviewForm();
+  } else {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      renderDashboard(session.user);
+    } else {
+      renderLogin();
+    }
+  }
+}
+
+function renderLogin(){
+  app.innerHTML = `
+    <div class="card">
+      <h1>Кабинет бизнеса</h1>
+      <p class="sub">Войдите или зарегистрируйтесь, чтобы собирать отзывы</p>
+      <input id="email" type="email" placeholder="Email" />
+      <input id="password" type="password" placeholder="Пароль" />
+      <div class="row">
+        <button onclick="login()">Войти</button>
+        <button class="secondary" onclick="signup()">Регистрация</button>
+      </div>
+      <p class="msg" id="auth-msg"></p>
+    </div>
+  `;
+}
+
+async function login(){
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { document.getElementById('auth-msg').textContent = error.message; return; }
+  renderDashboard(data.user);
+}
+
+async function signup(){
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) { document.getElementById('auth-msg').textContent = error.message; return; }
+  document.getElementById('auth-msg').textContent = 'Готово, теперь войдите';
+}
+
+async function renderDashboard(user){
+  const { data: businesses } = await sb.from('businesses').select('*').eq('owner_id', user.id);
+  if (!businesses || businesses.length === 0) {
+    app.innerHTML = `
+      <div class="card">
+        <h1>Создайте бизнес</h1>
+        <p class="sub">Например «Кофейня Пряник»</p>
+        <input id="biz-name" placeholder="Название бизнеса" />
+        <button onclick="createBusiness('${user.id}')">Создать</button>
+      </div>
+    `;
+    return;
+  }
+  const biz = businesses[0];
+  const link = window.location.origin + window.location.pathname + '?r=' + biz.slug;
+  const embed = '<iframe src="' + link + '&embed=1" style="width:100%;border:none;"></iframe>';
+
+  const { data: reviews } = await sb.from('testimonials').select('*').eq('business_id', biz.id).order('created_at', { ascending: false });
+
+  app.innerHTML = `
+    <div class="card">
+      <h1>${biz.name}</h1>
+      <p class="sub">Ссылка для клиентов</p>
+      <div class="code-box">${link}</div>
+      <p class="sub">Embed-код для сайта</p>
+      <div class="code-box">${embed.replace(/</g,'&lt;')}</div>
+      <button class="secondary" onclick="sb.auth.signOut().then(renderLogin)">Выйти</button>
+    </div>
+    <div class="card">
+      <h1 style="font-size:16px">Стена отзывов (${reviews ? reviews.length : 0})</h1>
+      <div id="wall"></div>
+    </div>
+  `;
+  const wall = document.getElementById('wall');
+  (reviews || []).forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'wall-item' + (r.visible ? '' : ' hidden-item');
+    div.innerHTML = `
+      <div class="top">
+        <span class="rating">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>
+        <button class="small secondary" data-id="${r.id}" data-visible="${r.visible}">${r.visible ? 'Скрыть' : 'Показать'}</button>
+      </div>
+      <p>${r.text}</p>
+      <div class="author">${r.name}</div>
+    `;
+    wall.appendChild(div);
+  });
+  wall.querySelectorAll('button').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-id');
+      const visible = btn.getAttribute('data-visible') === 'true';
+      await sb.from('testimonials').update({ visible: !visible }).eq('id', id);
+      renderDashboard(user);
+    };
+  });
+}
+
+async function createBusiness(userId){
+  const name = document.getElementById('biz-name').value.trim();
+  if (!name) return;
+  const slug = name.toLowerCase().replace(/[^a-zа-я0-9]+/gi, '-') + '-' + Math.random().toString(36).slice(2,6);
+  await sb.from('businesses').insert({ owner_id: userId, name, slug });
+  const { data: { session } } = await sb.auth.getSession();
+  renderDashboard(session.user);
+}
+
+async function renderReviewForm(){
+  const { data: businesses } = await sb.from('businesses').select('*').eq('slug', reviewSlug);
+  if (!businesses || businesses.length === 0) {
+    app.innerHTML = '<div class="card"><p>Ссылка не найдена</p></div>';
+    return;
+  }
+  const biz = businesses[0];
+  app.innerHTML = `
+    <div class="card">
+      <h1>Отзыв о «${biz.name}»</h1>
+      <p class="sub">Поделитесь впечатлением, это займёт минуту</p>
+      <div class="stars" id="stars"></div>
+      <input id="r-name" placeholder="Ваше имя" />
+      <textarea id="r-text" placeholder="Что вам понравилось?"></textarea>
+      <button onclick="submitReview('${biz.id}')">Отправить отзыв</button>
+      <p class="msg" id="r-msg"></p>
+    </div>
+  `;
+  renderStars();
+}
+
+function renderStars(){
+  const el = document.getElementById('stars');
+  el.innerHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const s = document.createElement('span');
+    s.className = 'star' + (i <= currentRating ? ' on' : '');
+    s.textContent = '★';
+    s.onclick = () => { currentRating = i; renderStars(); };
+    el.appendChild(s);
+  }
+}
+
+async function submitReview(businessId){
+  const name = document.getElementById('r-name').value.trim() || 'Аноним';
+  const text = document.getElementById('r-text').value.trim();
+  if (!text) return;
+  await sb.from('testimonials').insert({ business_id: businessId, name, rating: currentRating, text });
+  document.getElementById('r-msg').textContent = 'Спасибо, отзыв сохранён!';
+  document.getElementById('r-name').value = '';
+  document.getElementById('r-text').value = '';
+}
+
+init();
+</script>
+
+
+</body></html>
